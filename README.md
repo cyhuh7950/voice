@@ -222,7 +222,7 @@ curl -H "Authorization: Bearer <키>" ...
 ```
 
 `/health`만 인증 없이 열려 있다 (로드밸런서·모니터링용). 그 외 엔드포인트는 키 없이 401이다.
-`voicectl.sh test`는 `engine.env`에서 키를 읽어 자동으로 붙인다.
+`voicectl.sh test`는 `secrets.env`에서 키를 읽어 자동으로 붙인다.
 
 키를 바꾸려면 `secrets.env`를 고치고 해당 엔진만 재시작하면 된다. 인증을 끄려면 `API_KEY=`로 비운다.
 NPM의 Access List(basic auth / IP 허용목록)를 추가로 걸어도 된다.

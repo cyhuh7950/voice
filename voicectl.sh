@@ -43,6 +43,14 @@ meta() {
     | head -1 | sed 's/[[:space:]]*$//'
 }
 
+# secrets.env 에서 값을 읽는다. 비밀값은 버전관리에서 빠져 있어 파일이 없을 수 있다.
+secret() {
+  local file="$ROOT/$1/secrets.env" key="$2"
+  [[ -f $file ]] || return 0
+  sed -n "s/^[[:space:]]*${key}[[:space:]]*=[[:space:]]*//p" "$file" \
+    | head -1 | sed 's/[[:space:]]*$//'
+}
+
 valid_engine() {
   local e want="$1"
   for e in $(engines); do [[ $e == "$want" ]] && return 0; done
@@ -209,7 +217,7 @@ cmd_test() {
 
   local port kind key auth=()
   port="$(meta "$e" PORT)"; kind="$(meta "$e" ENGINE_KIND)"
-  key="$(meta "$e" API_KEY)"
+  key="$(secret "$e" API_KEY)"
   [[ -n $key ]] && auth=(-H "Authorization: Bearer $key")
 
   if [[ $kind == tts ]]; then
