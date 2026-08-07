@@ -1,0 +1,63 @@
+# melotts TTS (MeloTTS) — 의존성 주의
+#
+# MeloTTS 의 setup.py 는 transformers==4.27.4 / librosa==0.9.1 처럼 오래된 핀을 박아둔다.
+# 그 핀을 그대로 따르면 aarch64 에서 llvmlite 를 소스 빌드해야 하고 파이썬 3.10 이상에서
+# 깨지는 조합이 나온다. 그래서 MeloTTS 본체는 Dockerfile 에서 --no-deps 로 넣고,
+# 실제로 import 되는 의존성만 여기서 느슨하게 고정한다.
+
+# torch: aarch64 에서 PyPI 기본 휠은 CUDA 빌드(+cu130)라 nvidia-* / cuda-toolkit 까지
+# 5GB 넘게 끌고 온다. 이 서버는 GPU 가 없으므로 CPU 전용 휠을 명시적으로 고정한다.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.9.1+cpu
+transformers>=4.40,<5
+# torchaudio 는 aarch64 에 +cpu 로컬버전 휠이 없다. PyPI 일반 휠(2.9.1)이 위 CPU torch 와
+# 그대로 붙는 것을 확인했으므로 --no-deps 로 넣는다 (Dockerfile 참고).
+# torchaudio==2.9.1  ← Dockerfile 에서 --no-deps 설치
+
+# 텍스트 전처리 / 음소 변환
+num2words>=0.5.12
+inflect>=7.0
+unidecode>=1.3
+anyascii>=0.3
+eng-to-ipa>=0.0.2
+g2p-en>=2.1
+nltk>=3.8
+txtsplit>=1.0
+cached-path>=1.6
+
+# 한국어
+# g2pkk 는 첫 호출 때 python-mecab-ko 가 없으면 런타임에 pip install 을 시도한다.
+# 컨테이너 안에서 그게 터지면 요청이 실패하므로 미리 박아둔다.
+jamo>=0.4
+g2pkk>=0.1.2
+python-mecab-ko>=1.3.7
+python-mecab-ko-dic>=2.1.1
+
+# 일본어
+# melo/text/cleaner.py 가 언어와 무관하게 japanese 모듈까지 import 하므로
+# 한국어만 쓸 때도 fugashi + 사전이 필요하다.
+fugashi>=1.3
+mecab-python3>=1.0.6
+unidic-lite>=1.0.8
+pykakasi>=2.2
+
+# 중국어
+jieba>=0.42
+pypinyin>=0.50
+cn2an>=0.5.22
+
+# 스페인어/프랑스어
+gruut[es,fr]>=2.2
+
+# 오디오 / 기타
+librosa>=0.10
+soundfile>=0.12
+pydub>=0.25
+langid>=1.1.6
+loguru>=0.7
+tqdm>=4.66
+
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+numpy>=1.24,<2

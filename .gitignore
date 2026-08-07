@@ -1,0 +1,25 @@
+# 비밀값 — 절대 커밋하지 않는다. 각 서버에서 secrets.env.example 을 복사해 채운다.
+secrets.env
+*/secrets.env
+*.key
+*.pem
+
+# 모델 캐시 — 수 GB. 각 서버가 필요할 때 받는다.
+models/
+*/models/
+
+# 폴더별 가상환경
+.venv/
+*/.venv/
+
+# 파이썬
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# 작업 산출물
+*.wav
+*.mp3
+*.ogg
+*.flac
+*.log

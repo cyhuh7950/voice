@@ -1,0 +1,17 @@
+# 빌드 컨텍스트는 이 폴더 전체다(_common/voiceapi.py 를 각 이미지에 넣기 때문).
+# 아래를 제외하지 않으면 venv 수 GB 와 모델 캐시가 매번 도커 데몬으로 전송된다.
+
+*/.venv/
+*/models/
+*/__pycache__/
+**/__pycache__/
+*.pyc
+
+_template/
+_common/mkvenv.sh
+
+.git/
+*.log
+*.wav
+*.mp3
+README.md

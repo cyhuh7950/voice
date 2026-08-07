@@ -1,0 +1,30 @@
+# __ENGINE__ 단독 서비스. 다른 엔진과 독립적으로 뜨고 진다.
+#   voicectl.sh start __ENGINE__
+name: voice-__ENGINE__
+
+services:
+  __ENGINE__:
+    build:
+      context: ..
+      dockerfile: __ENGINE__/Dockerfile
+    image: voice-__ENGINE__:latest
+    container_name: voice-__ENGINE__
+    # 명시적으로 stop 하면 다시 뜨지 않는다 (always 를 쓰면 안 됨).
+    restart: unless-stopped
+    ports:
+      - "${BIND_HOST:-0.0.0.0}:${PORT:-__PORT__}:${PORT:-__PORT__}"
+    env_file:
+      - engine.env
+      # 비밀값은 별도 파일. 없어도 기동되도록 required: false.
+      - path: secrets.env
+        required: false
+    volumes:
+      - ./models:/models
+    mem_limit: ${MEM_LIMIT:-2g}
+    networks:
+      - proxy-network
+
+networks:
+  proxy-network:
+    name: proxy-network
+    external: true

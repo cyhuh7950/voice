@@ -1,0 +1,7 @@
+# moonshine STT — manylinux aarch64 휠 확인됨 (내장 ONNX 런타임)
+# sounddevice 가 딸려오므로 이미지에 libportaudio2 가 필요하다 (import 시점에 로드).
+moonshine-voice==0.1.0
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+numpy>=1.24,<3

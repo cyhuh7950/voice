@@ -1,0 +1,29 @@
+# melotts TTS 단독 서비스. 다른 엔진과 독립적으로 뜨고 진다.
+#   voicectl.sh start melotts
+name: voice-melotts
+
+services:
+  melotts:
+    build:
+      context: ..
+      dockerfile: melotts/Dockerfile
+    image: voice-melotts:latest
+    container_name: voice-melotts
+    restart: unless-stopped
+    ports:
+      - "${BIND_HOST:-0.0.0.0}:${PORT:-8202}:${PORT:-8202}"
+    env_file:
+      - engine.env
+      # 비밀값은 별도 파일. 없어도 기동되도록 required: false.
+      - path: secrets.env
+        required: false
+    volumes:
+      - ./models:/models
+    mem_limit: ${MEM_LIMIT:-4g}
+    networks:
+      - proxy-network
+
+networks:
+  proxy-network:
+    name: proxy-network
+    external: true

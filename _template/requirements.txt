@@ -1,0 +1,12 @@
+# __ENGINE__ 의존성
+#
+# aarch64(ARM64) 서버다. 새 패키지를 넣기 전에 휠이 있는지 먼저 확인할 것:
+#   curl -s https://pypi.org/pypi/<패키지>/json | python3 -c "import sys,json; d=json.load(sys.stdin); v=d['info']['version']; print([f['filename'] for f in d['releases'][v]])"
+# 소스 빌드로 넘어가면 ARM 에서 몇십 분 걸리거나 실패한다.
+
+# TODO: 엔진 패키지
+
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+numpy>=1.24,<3

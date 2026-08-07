@@ -1,0 +1,7 @@
+# supertonic TTS — pure python 휠, onnxruntime(aarch64) 사용
+# soundfile 이 딸려오므로 이미지에 libsndfile1 이 필요하다.
+supertonic==1.3.1
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+numpy>=1.24,<3
