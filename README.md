@@ -1,6 +1,6 @@
-# voice — STT / TTS 엔진 컨테이너
+# voice — 음성 엔진 컨테이너 (STT / TTS / 화자)
 
-STT·TTS 오픈소스 엔진을 **각각 독립된 컨테이너**로 띄우고, 외부에서 **HTTP API**로 호출하는 구성이다.
+음성 오픈소스 엔진을 **각각 독립된 컨테이너**로 띄우고, 외부에서 **HTTP API**로 호출하는 구성이다.
 엔진끼리 의존성이 없어 필요한 것만 골라 켜고, 새 엔진은 폴더 하나 추가로 붙는다.
 
 ```
@@ -11,13 +11,15 @@ voice/
 │   └── mkvenv.sh        폴더별 가상환경 생성
 ├── _template/           새 엔진 추가용 템플릿
 │
-├── whisper/             STT  8101   ┐
-├── moonshine/           STT  8102   │ 각 폴더가 완결된 서비스 단위:
-├── supertonic/          TTS  8201   │ engine.env, requirements.txt,
-└── melotts/             TTS  8202   ┘ server.py, Dockerfile, compose, .venv, models
+├── whisper/             STT      8101   ┐
+├── moonshine/           STT      8102   │ 각 폴더가 완결된 서비스 단위:
+├── supertonic/          TTS      8201   │ engine.env, requirements.txt,
+├── melotts/             TTS      8202   │ server.py, Dockerfile, compose, .venv, models
+└── speaker/             화자     8301   ┘
 ```
 
-포트 규칙: **STT는 81xx, TTS는 82xx**.
+포트 규칙: **STT는 81xx, TTS는 82xx, 화자는 83xx**.
+관례일 뿐이고 엔진 종류는 `engine.env`의 `ENGINE_KIND`(메타데이터)로만 판단한다.
 
 ---
 
@@ -32,6 +34,7 @@ RTF(Real-Time Factor)는 `처리시간 ÷ 오디오길이`로, **1보다 작으�
 | moonshine | 8102 | STT | tiny-ko | 216 MB | **0.05 ~ 0.18** | 8개 (컨테이너당 1개) |
 | supertonic | 8201 | TTS | supertonic-3 | 487 MB | **1.93** | 31개, 보이스 10종 |
 | melotts | 8202 | TTS | MeloTTS-KR | 약 1.5 GB | **약 6** | 6개 (컨테이너당 1개) |
+| speaker | 8301 | 화자 | wespeaker ECAPA-TDNN512-LM | 101 MB | **0.11** | 언어 무관 |
 
 ### 엔진 선택 가이드
 
@@ -41,6 +44,9 @@ RTF(Real-Time Factor)는 `처리시간 ÷ 오디오길이`로, **1보다 작으�
   다만 한국어는 tiny 모델뿐이고 **문장 끝 단어를 자주 놓친다** (아래 "알려진 제약" 참고).
 - `melotts`는 이 CPU에서 RTF 약 6이다. 3초 문장에 20초가 걸려 **실시간 대화용으로는 부적합**하다.
   품질 비교나 배치 합성용으로 두는 편이 맞다.
+- `speaker`는 STT/TTS와 성격이 다르다. 텍스트를 만들지 않고 **화자 벡터(192차원)**만 돌려준다.
+  "누가 말했는지" 식별하거나 등록되지 않은 목소리를 거부하는 데 쓴다. 100MB / 2.4초 발화에 약 0.28초로
+  STT·TTS와 같이 켜 둬도 부담이 적다.
 
 ---
 
@@ -67,13 +73,15 @@ RTF(Real-Time Factor)는 `처리시간 ÷ 오디오길이`로, **1보다 작으�
 ./voicectl.sh logs whisper -f     # 로그 추적
 ./voicectl.sh test supertonic "안녕하세요"          # TTS 합성 왕복 테스트
 ./voicectl.sh test whisper /tmp/voicectl-supertonic.wav   # STT 인식 왕복 테스트
+./voicectl.sh test speaker a.wav              # 화자 임베딩 (차원/L2 norm 요약)
+./voicectl.sh test speaker a.wav b.wav        # 두 파일의 화자 유사도
 ```
 
 ---
 
 ## API
 
-4개 엔진 모두 같은 규격을 쓴다. **OpenAI Audio API와 호환**되므로 기존 클라이언트를 그대로 붙일 수 있다.
+모든 엔진이 같은 규격을 쓴다. STT/TTS는 **OpenAI Audio API와 호환**되므로 기존 클라이언트를 그대로 붙일 수 있다.
 브라우저에서 온 webm/opus, mp3, m4a, flac 등은 서버가 ffmpeg으로 알아서 변환한다.
 
 각 엔진의 `GET /docs`에 대화형 OpenAPI 문서가 있다.
@@ -139,6 +147,62 @@ JSON 필드: `input`(필수), `voice`, `language`, `speed`(0.25~4.0),
 응답은 오디오 바이트이고, 참고 정보는 헤더로 온다:
 `X-Engine`, `X-Sample-Rate`, `X-Audio-Duration`, `X-Processing-Seconds`
 
+### 화자 — speaker(8301)
+
+음성을 넣으면 **192차원 화자 임베딩**이 나온다. 벡터는 L2 정규화돼 있어 **두 벡터의 내적이 곧 코사인
+유사도**다. 등록된 화자 벡터와의 유사도로 "누구인지" 고르고, 임계값 미만이면 등록되지 않은 목소리로
+거절하면 된다. 텍스트는 만들지 않으므로 언어와 무관하다.
+
+```bash
+# 임베딩 하나
+curl -H "Authorization: Bearer <키>" -F "file=@audio.wav" \
+     http://localhost:8301/v1/speaker/embed
+
+# 등록용 — 여러 발화의 평균 임베딩
+curl -H "Authorization: Bearer <키>" \
+     -F "files=@u1.wav" -F "files=@u2.wav" -F "files=@u3.wav" \
+     http://localhost:8301/v1/speaker/enroll
+
+# 두 오디오가 같은 화자인지 바로 확인 (임계값 튜닝용)
+curl -H "Authorization: Bearer <키>" -F "file_a=@a.wav" -F "file_b=@b.wav" \
+     http://localhost:8301/v1/speaker/compare
+```
+
+```jsonc
+// POST /v1/speaker/embed
+{
+  "engine": "speaker",
+  "model": "wespeaker-ecapa-tdnn512-LM",
+  "dim": 192,
+  "embedding": [0.0421, -0.0113, ...],   // L2 정규화된 float 192개
+  "duration": 2.438,                      // 오디오 길이(초)
+  "processing_s": 0.28
+}
+```
+
+`/v1/speaker/enroll`은 위에 더해 `count`, `files[].similarity_to_mean`,
+`min_pairwise_similarity`를 준다. 등록 발화 중 하나가 다른 사람 목소리면
+`min_pairwise_similarity`가 눈에 띄게 떨어지므로 등록 단계에서 걸러낼 수 있다.
+
+**짧은 오디오는 거절한다.** `MIN_AUDIO_SECONDS`(기본 1.0초) 미만이면 400과 함께 이유를 돌려준다.
+짧은 발화는 임베딩이 흔들려 오인식이 늘기 때문이다. 상한은 `MAX_AUDIO_SECONDS`(기본 60초).
+
+#### 임계값 — 이 서버 실측
+
+supertonic으로 합성한 2.4초 발화 5개(같은 화자 2쌍 + 다른 화자)의 코사인 유사도:
+
+|  | a1 | a2 | b1 | b2 | c1 |
+|---|---|---|---|---|---|
+| **a1** | 1.000 | **0.720** | 0.279 | 0.199 | 0.397 |
+| **a2** | 0.720 | 1.000 | 0.350 | 0.303 | 0.420 |
+| **b1** | 0.279 | 0.350 | 1.000 | **0.798** | 0.318 |
+| **b2** | 0.199 | 0.303 | 0.798 | 1.000 | 0.206 |
+| **c1** | 0.397 | 0.420 | 0.318 | 0.206 | 1.000 |
+
+같은 화자 0.72~0.80 / 다른 화자 0.20~0.42로 사이가 넉넉히 벌어진다.
+`SIMILARITY_THRESHOLD` 기본값 **0.5**는 이 간격의 가운데다. 실제 마이크 음성은 합성음보다
+분포가 넓으므로 운영 데이터로 다시 잡을 것.
+
 ### 파이썬에서 (OpenAI SDK 그대로)
 
 ```python
@@ -179,6 +243,11 @@ nginx-proxy-manager(NPM)와 같은 네트워크이므로 NPM이 **컨테이너 �
 | `https://stt.moonshine.sinsan.kr` | `voice-moonshine:8102` | moonshine (STT) |
 | `https://tts.supertonic.sinsan.kr` | `voice-supertonic:8201` | supertonic (TTS) |
 | `https://tts.melotts.sinsan.kr` | `voice-melotts:8202` | melotts (TTS) |
+
+`speaker`(8301)는 **아직 NPM에 등록하지 않았다.** 화자 임베딩은 생체 정보에 가까우므로
+번역 앱이 서버 내부(`proxy-network`)에서만 호출하는 지금 구성이면 굳이 인터넷에 열 이유가 없다.
+외부에서 써야 한다면 다른 엔진과 같은 방식으로 Proxy Host를 만들고(`voice-speaker:8301`),
+`secrets.env`의 키를 반드시 채운 상태로 열 것.
 
 NPM Proxy Host 설정: Scheme `http`, Forward Hostname은 **컨테이너 이름**,
 Forward Port는 컨테이너 내부 포트, SSL은 Let's Encrypt + Force SSL. Websockets는 불필요.
@@ -247,7 +316,7 @@ Oracle Cloud VCN 보안 목록 덕분이었고, 지금은 그 계층에 의존�
 ## 새 엔진 추가
 
 ```bash
-./voicectl.sh new piper tts 8203
+./voicectl.sh new piper tts 8203        # 종류: stt | tts | speaker
 ```
 
 `_template`을 복사해 이름·종류·포트를 치환한 폴더가 만들어진다. 그다음 3가지만 채우면 된다.
@@ -259,17 +328,25 @@ Oracle Cloud VCN 보안 목록 덕분이었고, 지금은 그 계층에 의존�
      | python3 -c "import sys,json; d=json.load(sys.stdin); v=d['info']['version']; print([f['filename'] for f in d['releases'][v]])"
    ```
 
-2. **`server.py`** — `load()`와, STT면 `transcribe()` / TTS면 `synthesize()`.
+2. **`server.py`** — `load()`와, 종류에 해당하는 함수 하나.
    HTTP 규격·오디오 변환·인증·health는 `_common/voiceapi.py`가 처리하므로 손대지 않는다.
    ```python
-   # STT: 16kHz mono float32 numpy → dict
+   # stt: 16kHz mono float32 numpy → dict
    def transcribe(audio, *, language, prompt, temperature, task) -> dict:
        return {"text": "...", "language": "ko", "segments": []}
 
-   # TTS: 텍스트 → (mono float32 numpy, sample_rate)
+   # tts: 텍스트 → (mono float32 numpy, sample_rate)
    def synthesize(text, *, voice, language, speed) -> tuple[np.ndarray, int]:
        return wav, 24000
+
+   # speaker: 16kHz mono float32 numpy → 임베딩 1차원 배열
+   def embed(audio) -> np.ndarray:
+       return vec
    ```
+
+   **종류를 새로 만들려면** `voiceapi.py`에 라우트 설치 함수를 쓰고 `register_kind("이름", 설치함수)`로
+   등록한다. 기존 종류의 코드는 건드리지 않는다. 한 엔진에만 필요한 라우트라면 등록 대신
+   `create_app(..., routes=내_라우트)`로 그 엔진이 직접 붙이면 된다.
 
 3. **`engine.env`** — 엔진별 설정. `voicectl.sh`가 이 파일로 서비스를 인식한다.
 
@@ -294,7 +371,7 @@ piper/.venv/bin/python piper/server.py
 `ffmpeg`은 오디오 변환에 반드시 필요하다. 이미지에는 들어 있고, 호스트 venv로 직접 돌릴 때는 호스트에 있어야 한다.
 
 모델 캐시는 `<엔진>/models/`에 남아 컨테이너를 다시 만들어도 재다운로드하지 않는다.
-현재 캐시 크기: whisper 142MB, moonshine 360MB, supertonic 386MB, melotts 1.2GB.
+현재 캐시 크기: whisper 142MB, moonshine 360MB, supertonic 386MB, melotts 1.2GB, speaker 25MB.
 
 ---
 
@@ -320,6 +397,13 @@ piper/.venv/bin/python piper/server.py
 **moonshine 캐시 경로는 절대경로여야 한다.** `MOONSHINE_VOICE_CACHE`에 상대경로를 주면
 모델을 받아놓고도 못 찾는다. 컨테이너는 `/models`라 해당 없고, 호스트 venv로 돌릴 때만 주의.
 
+**speaker 모델 다운로드가 HuggingFace 장애를 탄다.** 2026-08-08 구축 중 실측으로,
+`huggingface.co` → `us.aws.cdn.hf.co` 리다이렉트 뒤 CDN이 500을 내거나 본문 없이 스트림을 끊었다
+(curl 92 / hf_hub_download 500). `hf-mirror.com`도 같은 백엔드라 함께 실패한다.
+엔진은 URL 후보 × (urllib, curl) × 재시도로 버티지만, 업스트림이 죽어 있으면 방법이 없다.
+그럴 땐 받아둔 `voxceleb_ECAPA512_LM.onnx`(24,861,931 bytes)를 `speaker/models/`에 직접 넣고
+재시작하면 된다. 파일이 있으면 다운로드를 아예 시도하지 않는다.
+
 **라이선스.** 상업적으로 쓸 계획이라면 확인이 필요하다.
 
 | 엔진 | 코드 | 모델 |
@@ -328,6 +412,7 @@ piper/.venv/bin/python piper/server.py
 | moonshine | MIT | **Moonshine Community License — 비상업용.** 기동 시 로그에도 경고가 찍힌다 |
 | supertonic | 업스트림 저장소 확인 필요 | 업스트림 저장소 확인 필요 |
 | melotts | MIT | MIT |
+| speaker | Apache-2.0 (WeSpeaker) | VoxCeleb 학습 데이터 조건은 업스트림 확인 필요 |
 
 ---
 

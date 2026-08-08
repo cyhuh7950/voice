@@ -17,6 +17,10 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # 그래서 NPM 이 컨테이너 이름(voice-whisper 등)으로 바로 forward 할 수 있고,
 # 엔진마다 VCN 보안 목록에 포트를 따로 열 필요가 없다.
 NET="proxy-network"
+# 엔진 종류. 종류가 늘어나면 여기에 이름만 추가한다 (포트 대역은 사람용 관례일 뿐이고,
+# 종류 판단은 engine.env 의 ENGINE_KIND 로만 한다).
+KINDS="stt tts speaker"
+PORT_RULE="STT 81xx / TTS 82xx / 화자 83xx"
 
 c_red=$'\033[31m'; c_grn=$'\033[32m'; c_ylw=$'\033[33m'; c_dim=$'\033[2m'; c_bld=$'\033[1m'; c_off=$'\033[0m'
 
@@ -103,8 +107,8 @@ image_exists() {
 # ---------------------------------------------------------------- 명령
 
 cmd_list() {
-  printf "${c_bld}%-12s %-5s %-6s %-9s %-10s %s${c_off}\n" 엔진 종류 포트 이미지 상태 모델
-  local e kind port img state model
+  printf "${c_bld}%-12s %-8s %-6s %-9s %-10s %s${c_off}\n" 엔진 종류 포트 이미지 상태 모델
+  local e kind port img state model key
   for e in $(engines); do
     kind="$(meta "$e" ENGINE_KIND)"
     port="$(meta "$e" PORT)"
@@ -114,15 +118,15 @@ cmd_list() {
     else
       state="${c_dim}정지${c_off}"
     fi
-    case "$kind" in
-      stt) model="$(meta "$e" WHISPER_MODEL)$(meta "$e" MOONSHINE_LANGUAGE)" ;;
-      tts) model="$(meta "$e" SUPERTONIC_MODEL)$(meta "$e" MELO_LANGUAGE)" ;;
-      *)   model="-" ;;
-    esac
-    printf "%-12s %-5s %-6s %-9b %-10b %s\n" "$e" "$kind" "$port" "$img" "$state" "${model:--}"
+    # 어떤 키가 그 엔진의 "모델"인지는 엔진마다 다르다. 스크립트가 알 필요 없이
+    # engine.env 의 MODEL_KEY 가 자기 키 이름을 가리킨다 (종류별 분기 없음).
+    key="$(meta "$e" MODEL_KEY)"
+    model=""
+    [[ -n $key ]] && model="$(meta "$e" "$key")"
+    printf "%-12s %-8s %-6s %-9b %-10b %s\n" "$e" "$kind" "$port" "$img" "$state" "${model:--}"
   done
   echo
-  echo "${c_dim}포트 규칙: STT 81xx / TTS 82xx${c_off}"
+  echo "${c_dim}포트 규칙: ${PORT_RULE}${c_off}"
 }
 
 cmd_build() {
@@ -210,7 +214,7 @@ cmd_health() {
 
 # 실제 추론까지 확인한다. STT 는 TTS 로 만든 파일이나 지정한 파일을 넣어 왕복시킨다.
 cmd_test() {
-  [[ $# -ge 1 ]] || die "사용법: $0 test <엔진> [오디오파일(STT) | 문장(TTS)]"
+  [[ $# -ge 1 ]] || die "사용법: $0 test <엔진> [오디오파일(STT/화자) | 문장(TTS)]"
   local e="$1"; shift
   valid_engine "$e" || die "그런 엔진이 없습니다: $e"
   is_running "$e" || die "$e 가 실행 중이 아닙니다. 먼저 $0 start $e"
@@ -220,7 +224,32 @@ cmd_test() {
   key="$(secret "$e" API_KEY)"
   [[ -n $key ]] && auth=(-H "Authorization: Bearer $key")
 
-  if [[ $kind == tts ]]; then
+  if [[ $kind == speaker ]]; then
+    # 파일 1개면 임베딩, 2개면 두 화자 비교.
+    local fa="${1:-}" fb="${2:-}"
+    [[ -n $fa ]] || die "화자 테스트는 오디오 파일이 필요합니다: $0 test $e <파일.wav> [비교파일.wav]"
+    [[ -f $fa ]] || die "파일이 없습니다: $fa"
+    if [[ -n $fb ]]; then
+      [[ -f $fb ]] || die "파일이 없습니다: $fb"
+      echo "${c_bld}[$e] 비교:${c_off} $fa ↔ $fb"
+      curl -sS -m 300 "${auth[@]}" -F "file_a=@${fa}" -F "file_b=@${fb}" \
+        "http://localhost:${port}/v1/speaker/compare" | sed 's/^/  /'
+      echo
+    else
+      echo "${c_bld}[$e] 임베딩:${c_off} $fa"
+      # 임베딩 벡터 전체는 길어서 요약만 보여준다.
+      curl -sS -m 300 "${auth[@]}" -F "file=@${fa}" \
+        "http://localhost:${port}/v1/speaker/embed" \
+        | python3 -c 'import json,sys
+d = json.load(sys.stdin)
+if "embedding" not in d:
+    print("  " + json.dumps(d, ensure_ascii=False)); sys.exit(1)
+v = d["embedding"]
+print("  dim=%s / 오디오 %ss / 처리 %ss" % (d["dim"], d["duration"], d["processing_s"]))
+print("  앞 8개: " + ", ".join("%+.4f" % x for x in v[:8]))
+print("  L2 norm: %.6f" % (sum(x * x for x in v) ** 0.5))'
+    fi
+  elif [[ $kind == tts ]]; then
     local text="${1:-안녕하세요. 음성 합성 테스트입니다.}"
     local out="/tmp/voicectl-${e}.wav"
     echo "${c_bld}[$e] 합성:${c_off} $text"
@@ -246,12 +275,13 @@ cmd_test() {
 }
 
 cmd_new() {
-  [[ $# -eq 3 ]] || die "사용법: $0 new <엔진명> <stt|tts> <포트>
+  [[ $# -eq 3 ]] || die "사용법: $0 new <엔진명> <$(echo $KINDS | tr ' ' '|')> <포트>
   예) $0 new sherpa stt 8103
       $0 new piper  tts 8203
-  포트 규칙: STT 81xx / TTS 82xx"
-  local name="$1" kind="$2" port="$3"
-  [[ $kind == stt || $kind == tts ]] || die "종류는 stt 또는 tts 여야 합니다"
+  포트 규칙: ${PORT_RULE}"
+  local name="$1" kind="$2" port="$3" k found=0
+  for k in $KINDS; do [[ $kind == "$k" ]] && found=1; done
+  [[ $found == 1 ]] || die "종류는 다음 중 하나여야 합니다: $KINDS"
   [[ -d "$ROOT/$name" ]] && die "이미 있는 폴더입니다: $name"
   [[ -d "$ROOT/_template" ]] || die "_template 폴더가 없습니다"
 
@@ -262,10 +292,17 @@ cmd_new() {
     [[ -f "$ROOT/$name/$f" ]] || continue
     sed -i "s/__ENGINE__/$name/g; s/__KIND__/$kind/g; s/__PORT__/$port/g" "$ROOT/$name/$f"
   done
+  local impl
+  case "$kind" in
+    stt)     impl="transcribe" ;;
+    tts)     impl="synthesize" ;;
+    speaker) impl="embed" ;;
+    *)       impl="종류별 함수" ;;
+  esac
   echo "${c_grn}$name 생성 완료${c_off} ($kind, 포트 $port)"
   echo "다음 순서로 채우세요:"
   echo "  1) $name/requirements.txt — 파이썬 의존성"
-  echo "  2) $name/server.py — load() 와 $( [[ $kind == stt ]] && echo transcribe || echo synthesize )() 구현"
+  echo "  2) $name/server.py — load() 와 ${impl}() 구현"
   echo "  3) ./_common/mkvenv.sh $name   ← 호스트에서 먼저 검증 (권장)"
   echo "  4) $0 start $name"
 }
@@ -282,10 +319,12 @@ ${c_bld}voicectl.sh${c_off} — STT/TTS 엔진 컨테이너 제어
   ${c_bld}$0 status${c_off}  [엔진...]           상태/헬스/메모리 (생략 시 전체 조회)
   ${c_bld}$0 health${c_off}  [엔진...]           /health 원문 출력
   ${c_bld}$0 logs${c_off}    <엔진> [-f]         로그
-  ${c_bld}$0 test${c_off}    <엔진> [입력]       실제 추론 왕복 테스트
-  ${c_bld}$0 new${c_off}     <이름> <stt|tts> <포트>   _template 로 새 엔진 폴더 생성
+  ${c_bld}$0 test${c_off}    <엔진> [입력...]    실제 추론 왕복 테스트
+                              ${c_dim}(화자 엔진은 파일 1개=임베딩, 2개=비교)${c_off}
+  ${c_bld}$0 new${c_off}     <이름> <$(echo $KINDS | tr ' ' '|')> <포트>   _template 로 새 엔진 폴더 생성
 
 사용 가능한 엔진: $(engines | tr '\n' ' ')
+엔진 종류: $KINDS   ${c_dim}(포트 규칙: ${PORT_RULE})${c_off}
 
 ${c_dim}필요한 엔진만 골라 띄우는 것이 기본입니다. 전체를 한꺼번에 올리는 명령은 없습니다.${c_off}
 EOF

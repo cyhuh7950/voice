@@ -5,9 +5,13 @@ __ENGINE__ (__KIND__) 서버 — 새 엔진 추가용 템플릿.
 _common/voiceapi.py 가 처리하므로 손대지 않는다.
 
   load()        모델을 메모리에 올린다. 기동 시 한 번 호출된다.
-  transcribe()  STT 인 경우. 16kHz mono float32 numpy → {"text": ...}
-  synthesize()  TTS 인 경우. 텍스트 → (mono float32 numpy, sample_rate)
-  voices()      TTS 인 경우 선택. 보이스 목록.
+  transcribe()  kind=stt 인 경우. 16kHz mono float32 numpy → {"text": ...}
+  synthesize()  kind=tts 인 경우. 텍스트 → (mono float32 numpy, sample_rate)
+  voices()      kind=tts 인 경우 선택. 보이스 목록.
+  embed()       kind=speaker 인 경우. 16kHz mono float32 numpy → 임베딩 배열
+
+종류를 새로 만들려면 voiceapi.py 에 라우트 설치 함수를 쓰고 register_kind() 로 등록한다.
+이 엔진에만 필요한 라우트는 create_app(routes=...) 로 여기서 직접 붙일 수 있다.
 
 TODO 를 지우면서 채우면 된다.
 """
@@ -75,6 +79,15 @@ def voices() -> list[dict]:
     return [{"id": "default", "name": "default", "language": "-", "gender": "unknown"}]
 
 
+# ---- 화자(speaker) 엔진이면 이걸 구현 ---------------------------------------
+
+
+def embed(audio: np.ndarray) -> np.ndarray:
+    """audio 는 16kHz mono float32 (-1.0~1.0). 반환은 고정 차원 임베딩 1차원 배열."""
+    # TODO: 임베딩 추출. 내적이 코사인 유사도가 되도록 L2 정규화해서 돌려주는 편이 좋다.
+    raise NotImplementedError("embed() 를 구현하세요")
+
+
 spec = EngineSpec(
     name="__ENGINE__",
     kind="__KIND__",
@@ -89,13 +102,15 @@ spec = EngineSpec(
     },
 )
 
-# STT 면 transcribe=, TTS 면 synthesize=/voices= 만 넘긴다. 쓰지 않는 인자는 지울 것.
+# 자기 종류에 해당하는 것만 넘긴다. 쓰지 않는 인자와 함수는 지울 것.
+#   stt → transcribe= / tts → synthesize=, voices= / speaker → embed=
 app = create_app(
     spec,
     loader=load,
     transcribe=transcribe if spec.kind == "stt" else None,
     synthesize=synthesize if spec.kind == "tts" else None,
     voices=voices if spec.kind == "tts" else None,
+    embed=embed if spec.kind == "speaker" else None,
 )
 
 if __name__ == "__main__":
