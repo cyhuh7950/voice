@@ -97,7 +97,7 @@ def _fetch(url: str, how: str, tmp: Path) -> None:
         )
     size = tmp.stat().st_size
     if size < MODEL_MIN_BYTES:
-        raise RuntimeError(f"받은 파일이 너무 작습니다({size} bytes). 오류 응답으로 보입니다")
+        raise RuntimeError(f"Downloaded file is too small ({size} bytes). It looks like an error response")
 
 
 def _download(dest: Path) -> None:
@@ -109,8 +109,8 @@ def _download(dest: Path) -> None:
     """
     if not MODEL_URLS:
         raise RuntimeError(
-            f"모델 파일이 없고 SPEAKER_MODEL_URLS 도 비어 있습니다: {dest}\n"
-            f"engine.env 에 URL 을 넣거나 {dest} 에 직접 파일을 두세요"
+            f"Model file is missing and SPEAKER_MODEL_URLS is also empty: {dest}\n"
+            f"Add a URL to engine.env, or place the file directly at {dest}"
         )
     tmp = dest.with_suffix(dest.suffix + ".part")
     last = ""
@@ -121,18 +121,18 @@ def _download(dest: Path) -> None:
                     _fetch(url, how, tmp)
                     size = tmp.stat().st_size
                     tmp.replace(dest)
-                    log.info("모델 다운로드 완료: %s (%.1f MB, %s)", dest, size / 1e6, how)
+                    log.info("Model download complete: %s (%.1f MB, %s)", dest, size / 1e6, how)
                     return
                 except Exception as exc:
                     last = f"{url} [{how}] {type(exc).__name__}: {exc}"
-                    log.warning("모델 다운로드 실패 (%d/%d) %s", attempt, DOWNLOAD_RETRIES, last)
+                    log.warning("Model download failed (%d/%d) %s", attempt, DOWNLOAD_RETRIES, last)
         time.sleep(DOWNLOAD_RETRY_WAIT * attempt)
     tmp.unlink(missing_ok=True)
     raise RuntimeError(
-        "모델 다운로드에 모두 실패했습니다. 업스트림(HuggingFace CDN) 장애일 수 있습니다.\n"
-        f"  받을 곳: {', '.join(MODEL_URLS)}\n"
-        f"  마지막 오류: {last}\n"
-        f"  우회: 받아둔 {MODEL_FILE} 을 이 엔진의 models/ 폴더에 직접 넣고 재시작하세요"
+        "All model download attempts failed. This may be an upstream (HuggingFace CDN) outage.\n"
+        f"  Sources tried: {', '.join(MODEL_URLS)}\n"
+        f"  Last error: {last}\n"
+        f"  Workaround: download {MODEL_FILE} manually and place it in this engine's models/ folder, then restart"
     )
 
 
@@ -164,7 +164,7 @@ def load() -> None:
     dim = int(embed(warm).size)
     spec.extra["embedding_dim"] = dim
     spec.extra["model_file"] = str(path)
-    log.info("화자 모델 로드 완료: %s (%s → %s, dim=%d)", path.name, _input_name, _output_name, dim)
+    log.info("Speaker model loaded: %s (%s -> %s, dim=%d)", path.name, _input_name, _output_name, dim)
 
 
 # ---- 추론 --------------------------------------------------------------------
@@ -186,7 +186,7 @@ def _fbank(pcm: np.ndarray) -> np.ndarray:
     f.accept_waveform(SAMPLE_RATE, pcm.tolist())
     f.input_finished()
     if f.num_frames_ready <= 0:
-        raise ValueError("특징 프레임이 만들어지지 않았습니다 (오디오가 너무 짧습니다)")
+        raise ValueError("No feature frames were produced (audio is too short)")
     return np.stack([f.get_frame(i) for i in range(f.num_frames_ready)])
 
 
@@ -220,10 +220,10 @@ spec = EngineSpec(
             f"/ {FBANK_FRAME_SHIFT_MS:g}ms hop / CMN={'on' if APPLY_CMN else 'off'}"
         ),
         "normalized": L2_NORMALIZE,
-        "similarity": "cosine (정규화된 벡터의 내적)",
+        "similarity": "cosine (dot product of normalized vectors)",
         # 이 서버 실측: 같은 화자 0.72~0.80, 다른 화자 0.20~0.42.
         "similarity_threshold": SIMILARITY_THRESHOLD,
-        "license": "WeSpeaker Apache-2.0 / VoxCeleb 학습 데이터 조건은 업스트림 확인 필요",
+        "license": "WeSpeaker Apache-2.0 / check upstream for VoxCeleb training data terms",
     },
 )
 

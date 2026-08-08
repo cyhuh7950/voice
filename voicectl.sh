@@ -20,11 +20,11 @@ NET="proxy-network"
 # 엔진 종류. 종류가 늘어나면 여기에 이름만 추가한다 (포트 대역은 사람용 관례일 뿐이고,
 # 종류 판단은 engine.env 의 ENGINE_KIND 로만 한다).
 KINDS="stt tts speaker"
-PORT_RULE="STT 81xx / TTS 82xx / 화자 83xx"
+PORT_RULE="STT 81xx / TTS 82xx / speaker 83xx"
 
 c_red=$'\033[31m'; c_grn=$'\033[32m'; c_ylw=$'\033[33m'; c_dim=$'\033[2m'; c_bld=$'\033[1m'; c_off=$'\033[0m'
 
-die() { echo "${c_red}오류:${c_off} $*" >&2; exit 1; }
+die() { echo "${c_red}Error:${c_off} $*" >&2; exit 1; }
 
 # ---------------------------------------------------------------- 엔진 탐색
 
@@ -63,15 +63,15 @@ valid_engine() {
 
 require_engines() {
   [[ $# -gt 0 ]] || {
-    echo "${c_ylw}엔진을 지정하세요.${c_off} 전체를 한꺼번에 띄우지 않는 것이 기본 동작입니다."
+    echo "${c_ylw}Specify an engine.${c_off} By default, nothing starts unless you name it explicitly."
     echo
-    echo "사용 가능한 엔진: $(engines | tr '\n' ' ')"
-    echo "예) $0 ${SUBCMD:-start} whisper"
+    echo "Available engines: $(engines | tr '\n' ' ')"
+    echo "Example: $0 ${SUBCMD:-start} whisper"
     exit 1
   }
   local e
   for e in "$@"; do
-    valid_engine "$e" || die "그런 엔진 폴더가 없습니다: $e (사용 가능: $(engines | tr '\n' ' '))"
+    valid_engine "$e" || die "No such engine folder: $e (available: $(engines | tr '\n' ' '))"
   done
 }
 
@@ -84,9 +84,9 @@ dc() {
 ensure_net() {
   # proxy-network 는 이 스크립트가 만든 것이 아니라 서버 전체가 공유하는 기존 네트워크다.
   # 없다고 함부로 만들지 않고, 확인만 하고 안내한다.
-  docker network inspect "$NET" >/dev/null 2>&1 || die "공용 네트워크 '$NET' 가 없습니다.
-  이 네트워크는 nginx-proxy-manager 를 포함한 서버 공통 인프라입니다.
-  정말 없는 서버라면 먼저 만드세요:  docker network create $NET"
+  docker network inspect "$NET" >/dev/null 2>&1 || die "Shared network '$NET' not found.
+  This network is part of the server's shared infrastructure, including nginx-proxy-manager.
+  If this really is a fresh server, create it first: docker network create $NET"
 }
 
 container_of() { echo "voice-$1"; }
@@ -107,16 +107,16 @@ image_exists() {
 # ---------------------------------------------------------------- 명령
 
 cmd_list() {
-  printf "${c_bld}%-12s %-8s %-6s %-9s %-10s %s${c_off}\n" 엔진 종류 포트 이미지 상태 모델
+  printf "${c_bld}%-12s %-8s %-6s %-9s %-10s %s${c_off}\n" ENGINE KIND PORT IMAGE STATE MODEL
   local e kind port img state model key
   for e in $(engines); do
     kind="$(meta "$e" ENGINE_KIND)"
     port="$(meta "$e" PORT)"
-    img=$(image_exists "$e" && echo "있음" || echo "${c_dim}없음${c_off}")
+    img=$(image_exists "$e" && echo "built" || echo "${c_dim}not built${c_off}")
     if is_running "$e"; then
-      state="${c_grn}실행중${c_off}"
+      state="${c_grn}running${c_off}"
     else
-      state="${c_dim}정지${c_off}"
+      state="${c_dim}stopped${c_off}"
     fi
     # 어떤 키가 그 엔진의 "모델"인지는 엔진마다 다르다. 스크립트가 알 필요 없이
     # engine.env 의 MODEL_KEY 가 자기 키 이름을 가리킨다 (종류별 분기 없음).
@@ -126,14 +126,14 @@ cmd_list() {
     printf "%-12s %-8s %-6s %-9b %-10b %s\n" "$e" "$kind" "$port" "$img" "$state" "${model:--}"
   done
   echo
-  echo "${c_dim}포트 규칙: ${PORT_RULE}${c_off}"
+  echo "${c_dim}Port convention: ${PORT_RULE}${c_off}"
 }
 
 cmd_build() {
   require_engines "$@"
   local e
   for e in "$@"; do
-    echo "${c_bld}[$e] 이미지 빌드${c_off}"
+    echo "${c_bld}[$e] Building image${c_off}"
     dc "$e" build
   done
 }
@@ -143,12 +143,12 @@ cmd_start() {
   ensure_net
   local e port
   for e in "$@"; do
-    image_exists "$e" || { echo "${c_dim}[$e] 이미지가 없어 먼저 빌드합니다${c_off}"; dc "$e" build; }
-    echo "${c_bld}[$e] 기동${c_off}"
+    image_exists "$e" || { echo "${c_dim}[$e] No image found, building first${c_off}"; dc "$e" build; }
+    echo "${c_bld}[$e] Starting${c_off}"
     dc "$e" up -d
     port="$(meta "$e" PORT)"
-    echo "  ${c_dim}첫 기동은 모델 다운로드로 수 분 걸릴 수 있습니다.${c_off}"
-    echo "  확인: curl http://localhost:${port}/health"
+    echo "  ${c_dim}First start may take a few minutes while the model downloads.${c_off}"
+    echo "  Check: curl http://localhost:${port}/health"
   done
 }
 
@@ -156,7 +156,7 @@ cmd_stop() {
   require_engines "$@"
   local e
   for e in "$@"; do
-    echo "${c_bld}[$e] 정지${c_off}"
+    echo "${c_bld}[$e] Stopping${c_off}"
     dc "$e" down
   done
 }
@@ -165,7 +165,7 @@ cmd_restart() {
   require_engines "$@"
   local e
   for e in "$@"; do
-    echo "${c_bld}[$e] 재시작${c_off}"
+    echo "${c_bld}[$e] Restarting${c_off}"
     dc "$e" restart
   done
 }
@@ -174,29 +174,29 @@ cmd_status() {
   local targets=("$@")
   [[ ${#targets[@]} -eq 0 ]] && mapfile -t targets < <(engines)
 
-  printf "${c_bld}%-12s %-10s %-11s %-6s %-10s %s${c_off}\n" 엔진 상태 헬스 포트 메모리 응답
+  printf "${c_bld}%-12s %-10s %-11s %-6s %-10s %s${c_off}\n" ENGINE STATE HEALTH PORT MEMORY RESPONSE
   local e port state hz mem resp cid
   for e in "${targets[@]}"; do
     port="$(meta "$e" PORT)"
     if is_running "$e"; then
-      state="${c_grn}실행중${c_off}"
+      state="${c_grn}running${c_off}"
       hz="$(health_of "$e")"
       cid="$(container_of "$e")"
       mem="$(docker stats --no-stream --format '{{.MemUsage}}' "$cid" 2>/dev/null | cut -d/ -f1 | tr -d ' ')"
       resp="$(curl -s -m 3 "http://localhost:${port}/health" 2>/dev/null \
                | sed -n 's/.*"status"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')"
-      [[ -z $resp ]] && resp="${c_red}무응답${c_off}"
+      [[ -z $resp ]] && resp="${c_red}no response${c_off}"
     else
-      state="${c_dim}정지${c_off}"; hz="-"; mem="-"; resp="-"
+      state="${c_dim}stopped${c_off}"; hz="-"; mem="-"; resp="-"
     fi
     printf "%-12s %-10b %-11s %-6s %-10s %b\n" "$e" "$state" "${hz:--}" "$port" "${mem:--}" "$resp"
   done
 }
 
 cmd_logs() {
-  [[ $# -ge 1 ]] || die "사용법: $0 logs <엔진> [-f]"
+  [[ $# -ge 1 ]] || die "Usage: $0 logs <engine> [-f]"
   local e="$1"; shift
-  valid_engine "$e" || die "그런 엔진이 없습니다: $e"
+  valid_engine "$e" || die "No such engine: $e"
   dc "$e" logs --tail 100 "$@"
 }
 
@@ -207,17 +207,17 @@ cmd_health() {
   for e in "${targets[@]}"; do
     port="$(meta "$e" PORT)"
     echo "${c_bld}[$e] http://localhost:${port}/health${c_off}"
-    curl -s -m 5 "http://localhost:${port}/health" || echo "  ${c_red}응답 없음${c_off}"
+    curl -s -m 5 "http://localhost:${port}/health" || echo "  ${c_red}no response${c_off}"
     echo
   done
 }
 
 # 실제 추론까지 확인한다. STT 는 TTS 로 만든 파일이나 지정한 파일을 넣어 왕복시킨다.
 cmd_test() {
-  [[ $# -ge 1 ]] || die "사용법: $0 test <엔진> [오디오파일(STT/화자) | 문장(TTS)]"
+  [[ $# -ge 1 ]] || die "Usage: $0 test <engine> [audio file (STT/speaker) | sentence (TTS)]"
   local e="$1"; shift
-  valid_engine "$e" || die "그런 엔진이 없습니다: $e"
-  is_running "$e" || die "$e 가 실행 중이 아닙니다. 먼저 $0 start $e"
+  valid_engine "$e" || die "No such engine: $e"
+  is_running "$e" || die "$e is not running. Start it first: $0 start $e"
 
   local port kind key auth=()
   port="$(meta "$e" PORT)"; kind="$(meta "$e" ENGINE_KIND)"
@@ -227,16 +227,16 @@ cmd_test() {
   if [[ $kind == speaker ]]; then
     # 파일 1개면 임베딩, 2개면 두 화자 비교.
     local fa="${1:-}" fb="${2:-}"
-    [[ -n $fa ]] || die "화자 테스트는 오디오 파일이 필요합니다: $0 test $e <파일.wav> [비교파일.wav]"
-    [[ -f $fa ]] || die "파일이 없습니다: $fa"
+    [[ -n $fa ]] || die "Speaker test requires an audio file: $0 test $e <file.wav> [compare-file.wav]"
+    [[ -f $fa ]] || die "File not found: $fa"
     if [[ -n $fb ]]; then
-      [[ -f $fb ]] || die "파일이 없습니다: $fb"
-      echo "${c_bld}[$e] 비교:${c_off} $fa ↔ $fb"
+      [[ -f $fb ]] || die "File not found: $fb"
+      echo "${c_bld}[$e] Comparing:${c_off} $fa <-> $fb"
       curl -sS -m 300 "${auth[@]}" -F "file_a=@${fa}" -F "file_b=@${fb}" \
         "http://localhost:${port}/v1/speaker/compare" | sed 's/^/  /'
       echo
     else
-      echo "${c_bld}[$e] 임베딩:${c_off} $fa"
+      echo "${c_bld}[$e] Embedding:${c_off} $fa"
       # 임베딩 벡터 전체는 길어서 요약만 보여준다.
       curl -sS -m 300 "${auth[@]}" -F "file=@${fa}" \
         "http://localhost:${port}/v1/speaker/embed" \
@@ -245,29 +245,29 @@ d = json.load(sys.stdin)
 if "embedding" not in d:
     print("  " + json.dumps(d, ensure_ascii=False)); sys.exit(1)
 v = d["embedding"]
-print("  dim=%s / 오디오 %ss / 처리 %ss" % (d["dim"], d["duration"], d["processing_s"]))
-print("  앞 8개: " + ", ".join("%+.4f" % x for x in v[:8]))
+print("  dim=%s / audio %ss / processing %ss" % (d["dim"], d["duration"], d["processing_s"]))
+print("  first 8: " + ", ".join("%+.4f" % x for x in v[:8]))
 print("  L2 norm: %.6f" % (sum(x * x for x in v) ** 0.5))'
     fi
   elif [[ $kind == tts ]]; then
-    local text="${1:-안녕하세요. 음성 합성 테스트입니다.}"
+    local text="${1:-Hello, this is a speech synthesis test.}"
     local out="/tmp/voicectl-${e}.wav"
-    echo "${c_bld}[$e] 합성:${c_off} $text"
+    echo "${c_bld}[$e] Synthesizing:${c_off} $text"
     curl -sS -m 300 -D /tmp/voicectl-hdr "${auth[@]}" \
       -H 'Content-Type: application/json' \
       -d "$(printf '{"input":%s}' "$(printf '%s' "$text" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')")" \
       -o "$out" "http://localhost:${port}/v1/audio/speech"
     grep -i '^x-' /tmp/voicectl-hdr | sed 's/^/  /' || true
     if [[ -s $out ]]; then
-      echo "  ${c_grn}성공${c_off} → $out ($(stat -c%s "$out") bytes)"
+      echo "  ${c_grn}Success${c_off} -> $out ($(stat -c%s "$out") bytes)"
     else
-      echo "  ${c_red}실패${c_off}"; cat "$out" 2>/dev/null; return 1
+      echo "  ${c_red}Failed${c_off}"; cat "$out" 2>/dev/null; return 1
     fi
   else
     local file="${1:-}"
-    [[ -n $file ]] || die "STT 테스트는 오디오 파일이 필요합니다: $0 test $e <파일.wav>"
-    [[ -f $file ]] || die "파일이 없습니다: $file"
-    echo "${c_bld}[$e] 인식:${c_off} $file"
+    [[ -n $file ]] || die "STT test requires an audio file: $0 test $e <file.wav>"
+    [[ -f $file ]] || die "File not found: $file"
+    echo "${c_bld}[$e] Transcribing:${c_off} $file"
     curl -sS -m 300 "${auth[@]}" -F "file=@${file}" \
       "http://localhost:${port}/v1/audio/transcriptions" | sed 's/^/  /'
     echo
@@ -275,15 +275,15 @@ print("  L2 norm: %.6f" % (sum(x * x for x in v) ** 0.5))'
 }
 
 cmd_new() {
-  [[ $# -eq 3 ]] || die "사용법: $0 new <엔진명> <$(echo $KINDS | tr ' ' '|')> <포트>
-  예) $0 new sherpa stt 8103
-      $0 new piper  tts 8203
-  포트 규칙: ${PORT_RULE}"
+  [[ $# -eq 3 ]] || die "Usage: $0 new <engine-name> <$(echo $KINDS | tr ' ' '|')> <port>
+  Example: $0 new sherpa stt 8103
+           $0 new piper  tts 8203
+  Port convention: ${PORT_RULE}"
   local name="$1" kind="$2" port="$3" k found=0
   for k in $KINDS; do [[ $kind == "$k" ]] && found=1; done
-  [[ $found == 1 ]] || die "종류는 다음 중 하나여야 합니다: $KINDS"
-  [[ -d "$ROOT/$name" ]] && die "이미 있는 폴더입니다: $name"
-  [[ -d "$ROOT/_template" ]] || die "_template 폴더가 없습니다"
+  [[ $found == 1 ]] || die "Kind must be one of: $KINDS"
+  [[ -d "$ROOT/$name" ]] && die "Folder already exists: $name"
+  [[ -d "$ROOT/_template" ]] || die "_template folder not found"
 
   cp -r "$ROOT/_template" "$ROOT/$name"
   mkdir -p "$ROOT/$name/models"
@@ -297,36 +297,36 @@ cmd_new() {
     stt)     impl="transcribe" ;;
     tts)     impl="synthesize" ;;
     speaker) impl="embed" ;;
-    *)       impl="종류별 함수" ;;
+    *)       impl="kind-specific function" ;;
   esac
-  echo "${c_grn}$name 생성 완료${c_off} ($kind, 포트 $port)"
-  echo "다음 순서로 채우세요:"
-  echo "  1) $name/requirements.txt — 파이썬 의존성"
-  echo "  2) $name/server.py — load() 와 ${impl}() 구현"
-  echo "  3) ./_common/mkvenv.sh $name   ← 호스트에서 먼저 검증 (권장)"
+  echo "${c_grn}$name created${c_off} ($kind, port $port)"
+  echo "Fill these in, in order:"
+  echo "  1) $name/requirements.txt — Python dependencies"
+  echo "  2) $name/server.py — implement load() and ${impl}()"
+  echo "  3) ./_common/mkvenv.sh $name   <- verify on the host first (recommended)"
   echo "  4) $0 start $name"
 }
 
 usage() {
   cat <<EOF
-${c_bld}voicectl.sh${c_off} — STT/TTS 엔진 컨테이너 제어
+${c_bld}voicectl.sh${c_off} — STT/TTS engine container control
 
-  ${c_bld}$0 list${c_off}                       엔진 목록과 상태
-  ${c_bld}$0 start${c_off}   <엔진...>           지정한 엔진만 기동 (없으면 자동 빌드)
-  ${c_bld}$0 stop${c_off}    <엔진...>           지정한 엔진만 정지
-  ${c_bld}$0 restart${c_off} <엔진...>           재시작
-  ${c_bld}$0 build${c_off}   <엔진...>           이미지만 빌드
-  ${c_bld}$0 status${c_off}  [엔진...]           상태/헬스/메모리 (생략 시 전체 조회)
-  ${c_bld}$0 health${c_off}  [엔진...]           /health 원문 출력
-  ${c_bld}$0 logs${c_off}    <엔진> [-f]         로그
-  ${c_bld}$0 test${c_off}    <엔진> [입력...]    실제 추론 왕복 테스트
-                              ${c_dim}(화자 엔진은 파일 1개=임베딩, 2개=비교)${c_off}
-  ${c_bld}$0 new${c_off}     <이름> <$(echo $KINDS | tr ' ' '|')> <포트>   _template 로 새 엔진 폴더 생성
+  ${c_bld}$0 list${c_off}                       list engines and status
+  ${c_bld}$0 start${c_off}   <engine...>         start only the named engines (auto-builds if missing)
+  ${c_bld}$0 stop${c_off}    <engine...>         stop only the named engines
+  ${c_bld}$0 restart${c_off} <engine...>         restart
+  ${c_bld}$0 build${c_off}   <engine...>         build images only
+  ${c_bld}$0 status${c_off}  [engine...]         status/health/memory (all engines if omitted)
+  ${c_bld}$0 health${c_off}  [engine...]         print raw /health response
+  ${c_bld}$0 logs${c_off}    <engine> [-f]       logs
+  ${c_bld}$0 test${c_off}    <engine> [input...] round-trip inference test
+                              ${c_dim}(speaker engines: 1 file = embed, 2 files = compare)${c_off}
+  ${c_bld}$0 new${c_off}     <name> <$(echo $KINDS | tr ' ' '|')> <port>   create a new engine folder from _template
 
-사용 가능한 엔진: $(engines | tr '\n' ' ')
-엔진 종류: $KINDS   ${c_dim}(포트 규칙: ${PORT_RULE})${c_off}
+Available engines: $(engines | tr '\n' ' ')
+Engine kinds: $KINDS   ${c_dim}(port convention: ${PORT_RULE})${c_off}
 
-${c_dim}필요한 엔진만 골라 띄우는 것이 기본입니다. 전체를 한꺼번에 올리는 명령은 없습니다.${c_off}
+${c_dim}Starting only what you need is the default — there's no command to start everything at once.${c_off}
 EOF
 }
 
@@ -344,5 +344,5 @@ case "$SUBCMD" in
   test)      cmd_test "$@" ;;
   new)       cmd_new "$@" ;;
   ""|-h|--help|help) usage ;;
-  *)         die "모르는 명령: $SUBCMD (도움말: $0 --help)" ;;
+  *)         die "Unknown command: $SUBCMD (help: $0 --help)" ;;
 esac

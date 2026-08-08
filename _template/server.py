@@ -29,7 +29,7 @@ import numpy as np  # noqa: E402
 
 from voiceapi import STT_SAMPLE_RATE, EngineSpec, create_app, run  # noqa: E402
 
-MODEL = os.getenv("MODEL_NAME", "TODO-모델명")
+MODEL = os.getenv("MODEL_NAME", "TODO-model-name")
 
 _model = None
 
@@ -39,7 +39,7 @@ def load() -> None:
     # TODO: 모델 로딩. 예)
     #   from some_engine import Model
     #   _model = Model(MODEL, device="cpu")
-    raise NotImplementedError("load() 를 구현하세요")
+    raise NotImplementedError("Implement load()")
 
 
 # ---- STT 엔진이면 이걸 구현 -------------------------------------------------
@@ -55,7 +55,7 @@ def transcribe(
 ) -> dict:
     """audio 는 16kHz mono float32 (-1.0~1.0)."""
     # TODO: 추론. segments 는 없으면 빈 리스트여도 된다.
-    raise NotImplementedError("transcribe() 를 구현하세요")
+    raise NotImplementedError("Implement transcribe()")
     # return {"text": "...", "language": language, "segments": []}
 
 
@@ -71,7 +71,7 @@ def synthesize(
 ) -> tuple[np.ndarray, int]:
     """반환은 (mono float32 numpy, sample_rate)."""
     # TODO: 합성
-    raise NotImplementedError("synthesize() 를 구현하세요")
+    raise NotImplementedError("Implement synthesize()")
     # return wav, 24000
 
 
@@ -85,7 +85,7 @@ def voices() -> list[dict]:
 def embed(audio: np.ndarray) -> np.ndarray:
     """audio 는 16kHz mono float32 (-1.0~1.0). 반환은 고정 차원 임베딩 1차원 배열."""
     # TODO: 임베딩 추출. 내적이 코사인 유사도가 되도록 L2 정규화해서 돌려주는 편이 좋다.
-    raise NotImplementedError("embed() 를 구현하세요")
+    raise NotImplementedError("Implement embed()")
 
 
 spec = EngineSpec(

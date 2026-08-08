@@ -59,7 +59,7 @@ def load() -> None:
         except Exception:  # 손상된 스타일 파일은 건너뛴다
             continue
     if not _styles:
-        raise RuntimeError(f"보이스 스타일을 찾지 못했습니다: {MODEL_DIR}")
+        raise RuntimeError(f"No voice styles found: {MODEL_DIR}")
     spec.extra["voices"] = sorted(_styles)
 
 
@@ -88,14 +88,14 @@ def synthesize(
     assert _tts is not None
     name = voice or DEFAULT_VOICE
     if name not in _styles:
-        raise HTTPException(400, f"없는 보이스: {name} (가능: {', '.join(sorted(_styles))})")
+        raise HTTPException(400, f"Unknown voice: {name} (available: {', '.join(sorted(_styles))})")
 
     lang = (language or DEFAULT_LANGUAGE).lower()
     if lang not in st.SUPPORTED_LANGUAGES and lang != st.UNKNOWN_LANGUAGE:
         raise HTTPException(
             400,
-            f"지원하지 않는 언어: {lang} "
-            f"(가능: {', '.join(st.SUPPORTED_LANGUAGES)}, 자동은 '{st.UNKNOWN_LANGUAGE}')",
+            f"Unsupported language: {lang} "
+            f"(supported: {', '.join(st.SUPPORTED_LANGUAGES)}, auto-detect is '{st.UNKNOWN_LANGUAGE}')",
         )
 
     wav, _dur = _tts.synthesize(
@@ -120,7 +120,7 @@ spec = EngineSpec(
         "default_voice": DEFAULT_VOICE,
         "default_language": DEFAULT_LANGUAGE,
         "total_steps": TOTAL_STEPS,
-        "license": "Supertone supertonic — 배포 조건은 업스트림 저장소 확인 필요",
+        "license": "Supertone supertonic — check upstream repo for distribution terms",
     },
 )
 

@@ -66,7 +66,7 @@ _MIME = {
 def decode_audio(raw: bytes, sample_rate: int = STT_SAMPLE_RATE) -> np.ndarray:
     """임의 포맷(wav/mp3/webm/ogg/m4a/flac)의 바이트를 mono float32 PCM 으로."""
     if not raw:
-        raise HTTPException(400, "오디오 데이터가 비어 있습니다")
+        raise HTTPException(400, "Audio data is empty")
     cmd = [
         FFMPEG, "-nostdin", "-hide_banner", "-loglevel", "error",
         "-i", "pipe:0",
@@ -76,7 +76,7 @@ def decode_audio(raw: bytes, sample_rate: int = STT_SAMPLE_RATE) -> np.ndarray:
     p = subprocess.run(cmd, input=raw, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if p.returncode != 0 or not p.stdout:
         detail = p.stderr.decode("utf-8", "replace").strip()[:300]
-        raise HTTPException(400, f"오디오 디코딩 실패: {detail or 'ffmpeg 오류'}")
+        raise HTTPException(400, f"Audio decoding failed: {detail or 'ffmpeg error'}")
     return np.frombuffer(p.stdout, dtype=np.int16).astype(np.float32) / 32768.0
 
 
@@ -99,7 +99,7 @@ def encode_audio(wav: np.ndarray, sample_rate: int, fmt: str = "wav") -> tuple[b
     """float32 PCM 을 요청된 포맷으로. 반환값은 (바이트, content-type)."""
     fmt = (fmt or "wav").lower()
     if fmt not in _MIME:
-        raise HTTPException(400, f"지원하지 않는 출력 형식: {fmt} (가능: {', '.join(_MIME)})")
+        raise HTTPException(400, f"Unsupported output format: {fmt} (supported: {', '.join(_MIME)})")
 
     pcm16 = _to_int16(wav)
     if fmt == "pcm":
@@ -120,7 +120,7 @@ def encode_audio(wav: np.ndarray, sample_rate: int, fmt: str = "wav") -> tuple[b
     p = subprocess.run(cmd, input=pcm16.tobytes(), stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     if p.returncode != 0 or not p.stdout:
         detail = p.stderr.decode("utf-8", "replace").strip()[:300]
-        raise HTTPException(500, f"오디오 인코딩 실패({fmt}): {detail or 'ffmpeg 오류'}")
+        raise HTTPException(500, f"Audio encoding failed ({fmt}): {detail or 'ffmpeg error'}")
     return p.stdout, _MIME[fmt]
 
 
@@ -159,17 +159,17 @@ class _Engine:
                 self._loader()
             except Exception as exc:  # 모델 다운로드 실패 등
                 self.error = f"{type(exc).__name__}: {exc}"
-                log.exception("모델 로딩 실패")
+                log.exception("Model loading failed")
                 raise
             self.ready = True
             self.loaded_at = time.time()
-            log.info("모델 로딩 완료 (%.1fs)", self.loaded_at - t0)
+            log.info("Model loading complete (%.1fs)", self.loaded_at - t0)
 
     def require(self) -> None:
         if self.error:
-            raise HTTPException(503, f"엔진 초기화 실패: {self.error}")
+            raise HTTPException(503, f"Engine initialization failed: {self.error}")
         if not self.ready:
-            raise HTTPException(503, "모델 로딩 중입니다. 잠시 후 다시 시도하세요")
+            raise HTTPException(503, "Model is still loading. Please try again shortly")
 
 
 # ---------------------------------------------------------------- 요청 스키마
@@ -178,10 +178,10 @@ class _Engine:
 class SpeechRequest(BaseModel):
     """OpenAI /v1/audio/speech 호환 + language 확장."""
 
-    input: str = Field(..., description="합성할 텍스트")
-    model: str | None = Field(None, description="호환용. 무시된다")
-    voice: str | None = Field(None, description="보이스 id. 생략 시 엔진 기본값")
-    language: str | None = Field(None, description="언어 코드. 생략 시 엔진 기본값")
+    input: str = Field(..., description="Text to synthesize")
+    model: str | None = Field(None, description="For compatibility only. Ignored")
+    voice: str | None = Field(None, description="Voice id. Defaults to the engine's default if omitted")
+    language: str | None = Field(None, description="Language code. Defaults to the engine's default if omitted")
     speed: float = Field(1.0, ge=0.25, le=4.0)
     response_format: str = Field("wav", description="wav|mp3|opus|flac|pcm")
 
@@ -206,7 +206,7 @@ class EngineContext:
     def handler(self, name: str) -> Any:
         fn = self.handlers.get(name)
         if fn is None:
-            raise ValueError(f"{self.spec.kind} 엔진은 {name}() 를 넘겨야 합니다")
+            raise ValueError(f"A {self.spec.kind} engine must provide {name}()")
         return fn
 
     async def offload(self, fn: Callable[[], Any]) -> Any:
@@ -243,7 +243,7 @@ def _install_stt(ctx: EngineContext) -> list[str]:
         raw = await file.read()
         audio = decode_audio(raw, spec.sample_rate)
         if audio.size == 0:
-            raise HTTPException(400, "디코딩 결과가 빈 오디오입니다")
+            raise HTTPException(400, "Decoded audio is empty")
 
         t0 = time.perf_counter()
         result = await ctx.offload(
@@ -272,9 +272,9 @@ def _install_stt(ctx: EngineContext) -> list[str]:
             body["segments"] = result.get("segments", [])
         return JSONResponse(body)
 
-    @app.post("/v1/audio/transcriptions", summary="음성 → 텍스트 (OpenAI 호환)", dependencies=[auth])
+    @app.post("/v1/audio/transcriptions", summary="Speech to text (OpenAI-compatible)", dependencies=[auth])
     async def transcriptions(
-        file: UploadFile = File(..., description="오디오 파일"),
+        file: UploadFile = File(..., description="Audio file"),
         model: str | None = Form(None),
         language: str | None = Form(None),
         prompt: str | None = Form(None),
@@ -283,7 +283,7 @@ def _install_stt(ctx: EngineContext) -> list[str]:
     ):
         return await _run_stt(file, language, prompt, temperature, response_format, "transcribe")
 
-    @app.post("/v1/audio/translations", summary="음성 → 영어 텍스트 (지원 엔진만)", dependencies=[auth])
+    @app.post("/v1/audio/translations", summary="Speech to English text (supported engines only)", dependencies=[auth])
     async def translations(
         file: UploadFile = File(...),
         model: str | None = Form(None),
@@ -292,10 +292,10 @@ def _install_stt(ctx: EngineContext) -> list[str]:
         response_format: str = Form("json"),
     ):
         if not spec.extra.get("supports_translate"):
-            raise HTTPException(400, f"{spec.name} 은 음성→영어 번역을 지원하지 않습니다")
+            raise HTTPException(400, f"{spec.name} does not support speech-to-English translation")
         return await _run_stt(file, None, prompt, temperature, response_format, "translate")
 
-    @app.post("/transcribe", summary="/v1/audio/transcriptions 별칭", dependencies=[auth])
+    @app.post("/transcribe", summary="Alias for /v1/audio/transcriptions", dependencies=[auth])
     async def transcribe_alias(
         file: UploadFile = File(...),
         language: str | None = Form(None),
@@ -315,7 +315,7 @@ def _install_tts(ctx: EngineContext) -> list[str]:
     voices = ctx.handlers.get("voices")
     auth = ctx.auth
 
-    @app.get("/v1/voices", summary="사용 가능한 보이스 목록", dependencies=[auth])
+    @app.get("/v1/voices", summary="List available voices", dependencies=[auth])
     async def list_voices() -> dict:
         ctx.require()
         return {"engine": spec.name, "voices": voices() if voices else []}
@@ -324,9 +324,9 @@ def _install_tts(ctx: EngineContext) -> list[str]:
         ctx.require()
         text = (req.input or "").strip()
         if not text:
-            raise HTTPException(400, "input 이 비어 있습니다")
+            raise HTTPException(400, "input is empty")
         if len(text) > int(os.getenv("MAX_CHARS", "5000")):
-            raise HTTPException(413, "input 이 너무 깁니다")
+            raise HTTPException(413, "input is too long")
 
         t0 = time.perf_counter()
         wav, sr = await ctx.offload(
@@ -350,11 +350,11 @@ def _install_tts(ctx: EngineContext) -> list[str]:
             },
         )
 
-    @app.post("/v1/audio/speech", summary="텍스트 → 음성 (OpenAI 호환)", dependencies=[auth])
+    @app.post("/v1/audio/speech", summary="Text to speech (OpenAI-compatible)", dependencies=[auth])
     async def speech(req: SpeechRequest):
         return await _run_tts(req)
 
-    @app.post("/tts", summary="/v1/audio/speech 별칭", dependencies=[auth])
+    @app.post("/tts", summary="Alias for /v1/audio/speech", dependencies=[auth])
     async def tts_alias(req: SpeechRequest):
         return await _run_tts(req)
 
@@ -388,17 +388,17 @@ def _install_speaker(ctx: EngineContext) -> list[str]:
         seconds = audio.size / spec.sample_rate
         name = file.filename or "audio"
         if audio.size == 0:
-            raise HTTPException(400, f"디코딩 결과가 빈 오디오입니다: {name}")
+            raise HTTPException(400, f"Decoded audio is empty: {name}")
         if seconds < min_s:
             raise HTTPException(
                 400,
-                f"오디오가 너무 짧습니다: {name} {seconds:.2f}초 "
-                f"(최소 {min_s:.2f}초). 짧은 발화는 화자 임베딩이 불안정합니다",
+                f"Audio is too short: {name} {seconds:.2f}s "
+                f"(minimum {min_s:.2f}s). Speaker embeddings are unreliable on short utterances",
             )
         if seconds > max_s:
             raise HTTPException(
                 413,
-                f"오디오가 너무 깁니다: {name} {seconds:.1f}초 (최대 {max_s:.0f}초)",
+                f"Audio is too long: {name} {seconds:.1f}s (maximum {max_s:.0f}s)",
             )
         return audio, seconds
 
@@ -411,8 +411,8 @@ def _install_speaker(ctx: EngineContext) -> list[str]:
         norm = float(np.linalg.norm(vec))
         return vec / norm if norm > 0 else vec
 
-    @app.post("/v1/speaker/embed", summary="음성 → 화자 임베딩", dependencies=[auth])
-    async def speaker_embed(file: UploadFile = File(..., description="오디오 파일")):
+    @app.post("/v1/speaker/embed", summary="Audio to speaker embedding", dependencies=[auth])
+    async def speaker_embed(file: UploadFile = File(..., description="Audio file")):
         ctx.require()
         t0 = time.perf_counter()
         vec, seconds = await _embed_one(file)
@@ -430,13 +430,13 @@ def _install_speaker(ctx: EngineContext) -> list[str]:
 
     @app.post(
         "/v1/speaker/enroll",
-        summary="여러 발화 → 평균 화자 임베딩 (등록용)",
+        summary="Multiple utterances to averaged speaker embedding (for enrollment)",
         dependencies=[auth],
     )
-    async def speaker_enroll(files: list[UploadFile] = File(..., description="오디오 파일 여러 개")):
+    async def speaker_enroll(files: list[UploadFile] = File(..., description="Multiple audio files")):
         ctx.require()
         if not files:
-            raise HTTPException(400, "files 가 비어 있습니다")
+            raise HTTPException(400, "files is empty")
         t0 = time.perf_counter()
         vecs: list[np.ndarray] = []
         per_file: list[dict] = []
@@ -467,11 +467,11 @@ def _install_speaker(ctx: EngineContext) -> list[str]:
             }
         )
 
-    @app.post("/v1/speaker/compare", summary="두 오디오의 화자 유사도", dependencies=[auth])
+    @app.post("/v1/speaker/compare", summary="Speaker similarity between two audio files", dependencies=[auth])
     async def speaker_compare(
-        file_a: UploadFile = File(..., description="오디오 A"),
-        file_b: UploadFile = File(..., description="오디오 B"),
-        threshold: float | None = Form(None, description="생략 시 엔진 권장 임계값"),
+        file_a: UploadFile = File(..., description="Audio A"),
+        file_b: UploadFile = File(..., description="Audio B"),
+        threshold: float | None = Form(None, description="Defaults to the engine's recommended threshold if omitted"),
     ):
         ctx.require()
         t0 = time.perf_counter()
@@ -515,7 +515,7 @@ def _auth_dependency(api_key: str | None):
         if not token:
             token = request.headers.get("x-api-key", "").strip()
         if token != api_key:
-            raise HTTPException(401, "유효하지 않은 API 키")
+            raise HTTPException(401, "Invalid API key")
 
     return check
 
@@ -532,7 +532,7 @@ def create_app(
 ) -> FastAPI:
     if spec.kind not in KIND_ROUTES:
         raise ValueError(
-            f"등록되지 않은 엔진 종류: {spec.kind} (등록된 것: {', '.join(sorted(KIND_ROUTES))})"
+            f"Unregistered engine kind: {spec.kind} (registered: {', '.join(sorted(KIND_ROUTES))})"
         )
 
     api_key = os.getenv("API_KEY", "").strip() or None
@@ -542,7 +542,7 @@ def create_app(
     app = FastAPI(
         title=f"{spec.name} ({spec.kind.upper()}) API",
         version="1.0.0",
-        description=f"{spec.name} 엔진 단독 컨테이너. OpenAI Audio API 호환.",
+        description=f"Standalone container for the {spec.name} engine. OpenAI Audio API-compatible.",
     )
     app.add_middleware(
         CORSMiddleware,
@@ -562,7 +562,7 @@ def create_app(
 
     # ---- 상태 --------------------------------------------------------------
 
-    @app.get("/health", summary="헬스체크 (인증 불필요)")
+    @app.get("/health", summary="Health check (no auth required)")
     async def health() -> JSONResponse:
         body = {
             "status": "ok" if engine.ready else ("error" if engine.error else "loading"),
@@ -594,7 +594,7 @@ def create_app(
     if routes is not None:
         endpoints += list(routes(ctx) or [])
 
-    @app.get("/info", summary="엔진 정보", dependencies=[auth])
+    @app.get("/info", summary="Engine info", dependencies=[auth])
     async def info() -> dict:
         return {
             "engine": spec.name,

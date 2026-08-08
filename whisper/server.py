@@ -98,7 +98,7 @@ spec = EngineSpec(
         "compute_type": COMPUTE_TYPE,
         "beam_size": BEAM_SIZE,
         "vad_filter": VAD_FILTER,
-        "license": "MIT (모델: OpenAI Whisper, MIT)",
+        "license": "MIT (model: OpenAI Whisper, MIT)",
     },
 )
 
