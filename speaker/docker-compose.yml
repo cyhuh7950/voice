@@ -1,0 +1,30 @@
+# speaker 단독 서비스. 다른 엔진과 독립적으로 뜨고 진다.
+#   voicectl.sh start speaker
+name: voice-speaker
+
+services:
+  speaker:
+    build:
+      context: ..
+      dockerfile: speaker/Dockerfile
+    image: voice-speaker:latest
+    container_name: voice-speaker
+    # 명시적으로 stop 하면 다시 뜨지 않는다 (always 를 쓰면 안 됨).
+    restart: unless-stopped
+    ports:
+      - "${BIND_HOST:-0.0.0.0}:${PORT:-8301}:${PORT:-8301}"
+    env_file:
+      - engine.env
+      # 비밀값은 별도 파일. 없어도 기동되도록 required: false.
+      - path: secrets.env
+        required: false
+    volumes:
+      - ./models:/models
+    mem_limit: ${MEM_LIMIT:-2g}
+    networks:
+      - proxy-network
+
+networks:
+  proxy-network:
+    name: proxy-network
+    external: true

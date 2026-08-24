@@ -1,0 +1,11 @@
+# speaker 화자 임베딩 의존성 — aarch64(ARM64) 휠 확인 완료 (cp312 manylinux aarch64)
+#
+# torch 를 쓰지 않는다. torchaudio 로도 같은 fbank 를 만들 수 있지만 2GB 를 끌고 온다.
+# kaldi-native-fbank 는 같은 계산을 C++ 로 하고 휠이 몇 MB 다.
+onnxruntime>=1.17,<2
+kaldi-native-fbank>=1.20,<2
+
+fastapi>=0.115,<1
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+numpy>=1.24,<3
