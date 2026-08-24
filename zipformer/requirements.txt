@@ -1,0 +1,12 @@
+# zipformer (한국어 transducer) 의존성 — CPU 전용
+#
+# ★ torch / torchaudio 를 여기 적지 말 것 ★
+#   베이스 이미지(voice-rocm-base)가 torch==2.13.0+rocm7.2 를 이미 넣어놨다.
+#   여기에 torch 를 적으면 PyPI 기본 휠(CUDA 빌드)이 ROCm 빌드를 덮어써서 GPU 를 잃는다.
+#   (이 엔진 자체는 torch 를 쓰지 않지만, 같은 베이스를 공유하므로 규칙은 동일하다)
+#
+# sherpa-onnx 휠에 ONNX Runtime 이 정적으로 들어 있어 onnxruntime 을 따로 깔지 않는다.
+# GPU 가속은 WSL 에서 불가능하므로 CPU 빌드 그대로 쓴다.
+
+sherpa-onnx>=1.13,<2
+huggingface-hub

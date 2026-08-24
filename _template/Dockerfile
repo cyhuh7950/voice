@@ -1,30 +1,21 @@
-# __ENGINE__ __KIND__ — linux/arm64 CPU
+# __ENGINE__ __KIND__ — linux/x86_64, AMD ROCm (WSL/ROCDXG)
 #
 # 빌드 컨텍스트는 상위 폴더다 (_common/voiceapi.py 를 함께 넣기 때문):
 #   docker build -f __ENGINE__/Dockerfile ..
-FROM python:3.12-slim
+#
+# 베이스는 _base/Dockerfile 로 만든 공용 이미지다. torch(ROCm) 6GB 레이어와
+# ffmpeg / ROCm 런타임 의존 라이브러리 / fastapi·uvicorn 이 이미 들어 있다.
+#   docker build -f _base/Dockerfile -t voice-rocm-base:latest _base
+FROM voice-rocm-base:latest
 
-ENV PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    HF_HOME=/models \
-    PORT=__PORT__
-
-# ffmpeg 는 오디오 디코딩/인코딩에 필수다. curl 은 헬스체크용.
-# TODO: 엔진이 요구하는 네이티브 라이브러리를 추가한다.
-#   soundfile/librosa → libsndfile1 / sounddevice → libportaudio2 / git 설치 → git
-RUN apt-get update \
- && apt-get install -y --no-install-recommends ffmpeg curl \
- && rm -rf /var/lib/apt/lists/*
-
-# 호스트의 폴더별 venv 와 같은 격리를 이미지 안에서도 유지한다.
-RUN python -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
+ENV PORT=__PORT__
 
 WORKDIR /app
 COPY __ENGINE__/requirements.txt ./requirements.txt
-RUN pip install --upgrade pip wheel setuptools \
- && pip install -r requirements.txt
+# TODO: 엔진 고유 의존성만 requirements.txt 에 남긴다.
+#   torch/torchaudio/fastapi/uvicorn/numpy/soundfile 는 베이스에 있으므로 다시 적지 말 것.
+#   특히 torch 를 다시 적으면 PyPI 의 CUDA 빌드가 ROCm 빌드를 덮어써 GPU 를 잃는다.
+RUN pip install -r requirements.txt
 
 COPY _common/voiceapi.py ./voiceapi.py
 COPY __ENGINE__/server.py ./server.py

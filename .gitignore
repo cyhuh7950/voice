@@ -11,6 +11,8 @@ models/
 # 폴더별 가상환경
 .venv/
 */.venv/
+venv/
+*/venv/
 
 # 파이썬
 __pycache__/
@@ -23,3 +25,4 @@ __pycache__/
 *.ogg
 *.flac
 *.log
+edge-tts/

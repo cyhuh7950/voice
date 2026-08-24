@@ -1,0 +1,12 @@
+# qwen3-tts (Qwen3-TTS-12Hz-0.6B) 의존성 — x86_64 AMD ROCm (WSL/ROCDXG)
+#
+# ★ torch / torchaudio 를 여기 적지 말 것 ★
+#   베이스 이미지(voice-rocm-base)가 torch==2.13.0+rocm7.2 를 이미 넣어놨다.
+#   여기에 torch 를 적으면 PyPI 기본 휠(CUDA 빌드)이 ROCm 빌드를 덮어써서 GPU 를 잃는다.
+#   fastapi/uvicorn/python-multipart/numpy/soundfile 도 같은 이유로 베이스에 있다.
+#
+# qwen-tts 의 의존성에 torchaudio 가 들어 있지만 베이스의 ROCm 빌드가 이미 조건을 만족해
+# 다시 받지 않는다. transformers/accelerate 는 qwen-tts 가 정확한 버전을 고정한다.
+# gradio 도 딸려오는데 웹 데모용이라 쓰지 않는다 (의존성 해결을 위해 그대로 둔다).
+
+qwen-tts==0.1.1

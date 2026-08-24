@@ -43,7 +43,7 @@ _sample_rate = 44100
 def load() -> None:
     global _model, _speakers, _sample_rate
     if LANGUAGE not in SUPPORTED:
-        raise RuntimeError(f"MeloTTS 가 지원하지 않는 언어: {LANGUAGE} (가능: {', '.join(SUPPORTED)})")
+        raise RuntimeError(f"MeloTTS does not support language: {LANGUAGE} (supported: {', '.join(SUPPORTED)})")
 
     from melo.api import TTS  # import 자체가 무거워서 로딩 시점까지 미룬다
 
@@ -73,13 +73,13 @@ def synthesize(
     if language and language.upper() != LANGUAGE:
         raise HTTPException(
             400,
-            f"이 컨테이너는 '{LANGUAGE}' 전용입니다. '{language}' 를 쓰려면 "
-            f"engine.env 의 MELO_LANGUAGE 를 바꾸고 재시작하거나 언어별 컨테이너를 따로 띄우세요",
+            f"This container is dedicated to '{LANGUAGE}'. To use '{language}', "
+            f"change MELO_LANGUAGE in engine.env and restart, or run a separate container for that language",
         )
 
     name = voice or next(iter(sorted(_speakers)))
     if name not in _speakers:
-        raise HTTPException(400, f"없는 화자: {name} (가능: {', '.join(sorted(_speakers))})")
+        raise HTTPException(400, f"Unknown speaker: {name} (available: {', '.join(sorted(_speakers))})")
 
     # output_path=None 이면 파일을 쓰지 않고 오디오 배열을 그대로 돌려준다.
     audio = _model.tts_to_file(
@@ -105,7 +105,7 @@ spec = EngineSpec(
     extra={
         "backend": "MeloTTS (PyTorch CPU)",
         "available_languages": SUPPORTED,
-        "note": "컨테이너 1개 = 언어 1개. ARM CPU 에서 RTF 약 6 이므로 실시간 용도로는 느리다",
+        "note": "One container per language. On ARM CPU, RTF is roughly 6, so it's slow for real-time use",
         "license": "MIT (MeloTTS)",
     },
 )

@@ -1,0 +1,59 @@
+# cosyvoice (Fun-CosyVoice3-0.5B) 의존성 — x86_64 AMD ROCm (WSL/ROCDXG)
+#
+# 원본 CosyVoice/requirements.txt 는 학습·grpc·TensorRT·vLLM 까지 포함해 무겁다.
+# 여기서는 추론(zero-shot/cross-lingual/instruct)에 실제로 필요한 것만 남겼다
+# (deepspeed/tensorrt*/vllm/grpcio*/gdown/tensorboard/matplotlib/rich 제외 — 학습·서빙 전용).
+# pyarrow 는 학습용으로 보였지만 cosyvoice.dataset.processor 가 hyperpyyaml 설정 로딩
+# 체인에서 import 돼 추론 경로에도 필요하다.
+#
+# ★ torch / torchaudio 를 여기 적지 말 것 ★
+#   베이스 이미지(voice-rocm-base)가 torch==2.13.0+rocm7.2 를 이미 넣어놨다.
+#   여기에 torch 를 적으면 PyPI 기본 휠(CUDA 빌드)이 ROCm 빌드를 덮어써서 GPU 를 잃는다.
+#   fastapi/uvicorn/python-multipart/numpy/soundfile 도 같은 이유로 베이스에 있다.
+
+conformer==0.3.2
+diffusers==0.29.0
+huggingface-hub
+hydra-core==1.3.2
+HyperPyYAML==1.2.3
+inflect==7.3.1
+librosa==0.10.2
+lightning==2.2.4
+modelscope==1.20.0
+networkx==3.1
+# CosyVoice 생태계(librosa/pyworld/matcha-tts)가 numpy 1.x ABI 를 전제한다.
+# 베이스 이미지는 numpy 2.x 를 넣어두므로 여기서 되돌린다.
+numpy==1.26.4
+omegaconf==2.3.0
+onnx==1.16.0
+# ONNX Runtime 은 CPU 빌드다. WSL 에서는 GPU 가속을 쓸 수 없다 —
+# AMD 가 내놓는 ROCm 용 ONNX 휠은 onnxruntime_migraphx 뿐인데 AMD 공식 문서가
+# "MIGraphX and mGPU configuration are not currently supported by WSL" 이라고 못박고 있다.
+# 영향 범위는 speech tokenizer / flow decoder estimator 두 곳이고,
+# LLM·flow·hift 본체는 PyTorch 라 GPU 로 돈다.
+# (CUDA 판은 onnxruntime-gpu==1.20.2 였는데 CPU 빌드에는 1.20.2 가 없다. 1.20.1 이 최근접이다)
+onnxruntime==1.20.1
+openai-whisper==20250625
+protobuf==4.25
+pyarrow
+pydantic>=2.7,<3
+pyworld==0.3.4
+# --- CUDA 판이 "학습·서빙 전용"이라며 뺐지만 실제 추론 경로에 필요한 것들 -------------
+# cosyvoice3.yaml 을 HyperPyYAML 이 읽을 때 pydoc.locate 로 클래스 경로를 동적 import 한다.
+# 그 체인이 아래 넷을 끌어온다. 정적 의존성 목록만 봐서는 알 수 없고, 빠지면 기동이
+# ModuleNotFoundError 로 죽는다 (컨테이너에서 실제 로딩을 반복 시도해 찾아낸 목록이다).
+rich
+gdown
+matplotlib
+wget
+transformers==4.51.3
+x-transformers==2.11.24
+wetext==0.0.4
+# matcha-tts 는 여기 없다. 빌드 격리 환경에서 numpy 를 소스 빌드하려다 실패하기 때문에
+# (Python 3.12 에서는 그 조합의 numpy 휠이 없다) Dockerfile 이 --no-build-isolation 으로
+# 따로 설치한다. CUDA 판은 Python 3.10 이라 이 문제가 드러나지 않았다.
+
+# hyperpyyaml(→ cosyvoice.flow.flow_matching)가 pkg_resources 를 쓰는데,
+# 최신 setuptools 는 pkg_resources 를 통째로 제거했다. 베이스 이미지가 최신판을
+# 받아버리므로 여기서 구버전에 고정해 덮어쓴다.
+setuptools<81

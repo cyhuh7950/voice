@@ -1,0 +1,12 @@
+# whisper (large-v3) 의존성 — x86_64 AMD ROCm (WSL/ROCDXG)
+#
+# ★ torch / torchaudio 를 여기 적지 말 것 ★
+#   베이스 이미지(voice-rocm-base)가 torch==2.13.0+rocm7.2 를 이미 넣어놨다.
+#   여기에 torch 를 적으면 PyPI 기본 휠(CUDA 빌드)이 ROCm 빌드를 덮어써서 GPU 를 잃는다.
+#   fastapi/uvicorn/python-multipart/numpy/soundfile 도 같은 이유로 베이스에 있다.
+#
+# faster-whisper 는 쓰지 않는다. 백엔드인 CTranslate2 가 CUDA/CPU 만 지원해서
+# AMD GPU 에서는 CPU 로 떨어진다 (ctranslate2-rocm 은 PyPI 에 없다).
+
+transformers>=4.51,<5
+accelerate>=0.30

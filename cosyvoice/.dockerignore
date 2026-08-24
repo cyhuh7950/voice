@@ -1,0 +1,11 @@
+# 이 엔진은 빌드 컨텍스트가 루트(..)가 아니라 cosyvoice/ 폴더다 (repo/ 서브모듈을 넣어야 해서).
+# 그래서 루트 .dockerignore 가 적용되지 않는다. 무거운 것을 여기서 따로 뺀다.
+#
+# 특히 models/ 는 9.1GB 라 빼지 않으면 매 빌드마다 도커 데몬으로 통째로 전송된다.
+# 모델은 이미지가 아니라 compose 의 ./models:/models 바인드 마운트로 들어간다.
+models/
+.venv/
+**/__pycache__
+**/*.py[cod]
+**/.git
+repo/.git

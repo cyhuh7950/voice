@@ -1,0 +1,24 @@
+# xtts (XTTS-v2) 의존성 — x86_64 AMD ROCm (WSL/ROCDXG)
+#
+# ★ torch / torchaudio 를 여기 적지 말 것 ★
+#   베이스 이미지(voice-rocm-base)가 torch==2.13.0+rocm7.2 를 이미 넣어놨다.
+#   여기에 torch 를 적으면 PyPI 기본 휠(CUDA 빌드)이 ROCm 빌드를 덮어써서 GPU 를 잃는다.
+#   coqui-tts 는 torch 를 extras(cpu/cuda)로 빼놨으므로 그냥 설치하면 건드리지 않는다.
+#   반드시 `coqui-tts` 로만 적을 것 — `coqui-tts[cuda]` 는 CUDA torch 를 끌고 온다.
+#
+# 원본 coqui-ai/TTS 가 아니라 유지보수 포크(idiap/coqui-ai-TTS)다. import 경로는 동일하다.
+
+coqui-tts>=0.27,<1
+
+# coqui-tts 는 `transformers>=4.57` 만 적어두고 상한이 없다. 그대로 두면 pip 가 5.x 를 깔고,
+# 거기서 제거된 transformers.pytorch_utils.isin_mps_friendly 를 참조하다 기동이 죽는다:
+#   ImportError: cannot import name 'isin_mps_friendly' from 'transformers.pytorch_utils'
+# 업스트림이 상한을 넣을 때까지 여기서 4.x 로 묶는다.
+transformers>=4.57,<5
+
+# coqui-tts 0.27 은 오디오 입출력을 torchcodec 에 맡긴다. TTS/__init__.py 가 없으면
+# 바로 ImportError 를 던진다 (업스트림은 [codec] extra 로 빼놨는데, 그 extra 를 쓰면
+# torch 까지 함께 끌어와 ROCm 빌드를 덮어쓰므로 여기서 torchcodec 만 따로 적는다).
+# torchcodec 은 torch 버전을 고정하지 않고 FFmpeg 공유 라이브러리를 쓰는데,
+# 베이스 이미지에 ffmpeg 이 들어 있어 그대로 동작한다.
+torchcodec>=0.8

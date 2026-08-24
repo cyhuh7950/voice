@@ -34,8 +34,8 @@ def load() -> None:
     global _tr
     if LANGUAGE not in mv.supported_languages():
         raise RuntimeError(
-            f"moonshine 이 지원하지 않는 언어: {LANGUAGE} "
-            f"(가능: {', '.join(mv.supported_languages())})"
+            f"moonshine does not support language: {LANGUAGE} "
+            f"(supported: {', '.join(mv.supported_languages())})"
         )
     arch = mv.string_to_model_arch(ARCH) if ARCH else None
     # 캐시에 없으면 이 호출이 다운로드까지 처리하고 모델 경로를 돌려준다.
@@ -58,9 +58,9 @@ def transcribe(
     if language and language.lower() != LANGUAGE:
         raise HTTPException(
             400,
-            f"이 컨테이너는 '{LANGUAGE}' 전용입니다. '{language}' 를 쓰려면 "
-            f"engine.env 의 MOONSHINE_LANGUAGE 를 바꾸고 재시작하거나, "
-            f"해당 언어용 컨테이너를 따로 띄우세요",
+            f"This container is dedicated to '{LANGUAGE}'. To use '{language}', "
+            f"change MOONSHINE_LANGUAGE in engine.env and restart, "
+            f"or run a separate container for that language",
         )
 
     # moonshine 은 파이썬 float 리스트를 받는다 (numpy 배열이 아님).
@@ -95,8 +95,8 @@ spec = EngineSpec(
         "backend": "moonshine-voice (ONNX)",
         "supports_translate": False,  # 음성→영어 번역 기능 없음
         "available_languages": list(mv.supported_languages()),
-        "note": "컨테이너 1개 = 언어 1개. 다국어가 필요하면 언어별로 따로 띄운다",
-        "license": "코드 MIT / 모델 Moonshine Community License(비상업용) — 상업적 사용은 별도 확인 필요",
+        "note": "One container per language. For multiple languages, run one container per language",
+        "license": "Code MIT / model Moonshine Community License (non-commercial) — check separately for commercial use",
     },
 )
 

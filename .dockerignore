@@ -1,17 +1,20 @@
-# 빌드 컨텍스트는 이 폴더 전체다(_common/voiceapi.py 를 각 이미지에 넣기 때문).
-# 아래를 제외하지 않으면 venv 수 GB 와 모델 캐시가 매번 도커 데몬으로 전송된다.
+# 빌드 컨텍스트는 항상 이 루트(..)다. 엔진 폴더의 무거운/불필요한 산출물을 build context 전송에서 뺀다.
+**/.git
+**/.venv
+**/__pycache__
+**/*.pyc
+.git
+.agents
+.codex
+.env
+venv
+.venv
+__pycache__
+**/__pycache__
+*.py[cod]
+*.body
 
-*/.venv/
-*/models/
-*/__pycache__/
-**/__pycache__/
-*.pyc
-
-_template/
-_common/mkvenv.sh
-
-.git/
-*.log
-*.wav
-*.mp3
-README.md
+# Persistent or generated host data is provided through bind mounts.
+models
+output
+temp

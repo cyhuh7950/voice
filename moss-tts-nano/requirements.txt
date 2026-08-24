@@ -1,0 +1,14 @@
+# moss-tts-nano (MOSS-TTS-Nano-100M-ONNX) 의존성 — CPU 전용
+#
+# ★ torch / torchaudio 를 여기 적지 말 것 ★
+#   업스트림 requirements.txt 는 torch==2.7.0 / torchaudio==2.7.0 을 못박아두는데,
+#   그대로 설치하면 PyPI 의 CUDA 빌드가 베이스 이미지의 ROCm 빌드를 덮어써서 GPU 를 잃는다.
+#   (이 엔진 자체는 CPU 로 돌지만 같은 베이스 이미지를 공유하므로 다른 엔진까지 영향받는다)
+#   fastapi/uvicorn/python-multipart/numpy/soundfile 도 베이스에 이미 있다.
+#
+# 업스트림 requirements 에서 위 항목을 뺀 나머지다.
+# WeTextProcessing 은 pynini 소스 빌드가 필요해 제외했다 (ENABLE_WETEXT=0 기본값).
+
+sentencepiece>=0.1.99
+transformers==4.57.1
+onnxruntime>=1.20.0
